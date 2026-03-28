@@ -214,11 +214,22 @@ fn run_with_spec<T: EthSpec>(eth2_network_config: Eth2NetworkConfig, cli: &Cli) 
         state.latest_execution_payload_header = exec_block_to_execution_payload_header_fulu(block)?;
     };
 
+    // Compute and set genesis_validators_root on the state before persisting.
+    // This must happen before writing genesis.ssz so the field is non-zero in the SSZ output.
+    let genesis_validators_root = state
+        .update_validators_tree_hash_cache()
+        .map_err(|e| anyhow!("Failed to compute genesis_validators_root: {:?}", e))?;
+    *state.genesis_validators_root_mut() = genesis_validators_root;
+
     // Persist output files
     let output = cli.output.clone().unwrap_or(cli.testnet_dir.clone());
     fs::create_dir_all(&output)?;
     fs::write(Path::new(&output).join("genesis.ssz"), state.as_ssz_bytes())?;
     fs::write(Path::new(&output).join("tranches.csv"), tranches)?;
+    fs::write(
+        Path::new(&output).join("genesis_validators_root.txt"),
+        format!("0x{:x}", genesis_validators_root),
+    )?;
 
     Ok(())
 }
